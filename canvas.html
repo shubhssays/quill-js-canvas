@@ -10,39 +10,93 @@
     <!-- Include Quill Image Resize CSS -->
     <link href="https://cdn.jsdelivr.net/npm/quill-image-resize-module@3.0.0/image-resize.min.css" rel="stylesheet">
     <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f4f4f4;
+        }
+
         #editor {
-            height: 700px;
+            width: 80%;
+            max-width: 800px;
+            height: 400px;
+            margin-top: 20px;
+            border: 1px solid #ddd;
             position: relative;
+            overflow: hidden;
+        }
+
+        #editor-content {
+            height: 100%;
+            overflow: hidden;
+        }
+
+        .ql-toolbar.hidden-for-capture {
+            visibility: hidden;
         }
 
         #imagePreview {
-            margin-top: 20px;
-            border: 1px solid #ccc;
-        }
-
-        .buttons {
-            margin-top: 20px;
+            width: 80%;
+            max-width: 800px;
+            margin: 20px 0;
+            border: 1px solid #ddd;
+            background-color: #fff;
+            text-align: center;
         }
 
         .toolbar {
-            margin-bottom: 10px;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            margin: 20px;
+            gap: 10px;
         }
 
-        .selection {
-            border: 2px dashed #000;
-            position: absolute;
-            pointer-events: none;
-            background: rgba(0, 0, 0, 0.1);
+        .toolbar input[type="file"],
+        .toolbar select,
+        .toolbar input[type="range"],
+        .toolbar input[type="color"],
+        .toolbar button {
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+            background-color: #fff;
         }
 
-        .selection.hidden {
-            display: none;
+        .toolbar label {
+            margin-right: 10px;
+        }
+
+        .buttons {
+            margin: 20px;
+        }
+
+        .buttons button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            background-color: #007bff;
+            color: #fff;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 0 5px;
+        }
+
+        .buttons button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
         }
     </style>
 </head>
 
 <body>
-    <div id="editor"></div>
+    <div id="editor">
+        <div id="editor-content"></div>
+    </div>
     <div class="toolbar">
         <input type="file" id="imageUpload" accept="image/*">
         <select id="imageFormat">
@@ -51,6 +105,10 @@
         </select>
         <input type="range" id="quality" min="0.1" max="1" step="0.1" value="0.8">
         <label for="quality">Quality</label>
+        <input type="color" id="backgroundColor" value="#ffffff">
+        <button id="gradientToggle">Add Gradient</button>
+        <input type="color" id="gradientStart" value="#ffffff" disabled>
+        <input type="color" id="gradientEnd" value="#000000" disabled>
     </div>
     <div class="buttons">
         <button id="convert">Convert to Image</button>
@@ -67,7 +125,7 @@
     <script src="https://cdn.jsdelivr.net/npm/quill-image-resize-module@3.0.0/image-resize.min.js"></script>
     <script>
         // Initialize Quill
-        const quill = new Quill('#editor', {
+        const quill = new Quill('#editor-content', {
             theme: 'snow',
             modules: {
                 toolbar: [
@@ -97,55 +155,56 @@
             }
         });
 
+        // Function to update editor background
+        function updateEditorBackground() {
+            const gradientStart = document.getElementById('gradientStart').value;
+            const gradientEnd = document.getElementById('gradientEnd').value;
+            const backgroundColor = document.getElementById('backgroundColor').value;
+            const useGradient = !document.getElementById('gradientStart').disabled;
+
+            const editor = document.getElementById('editor');
+            const editorContent = document.getElementById('editor-content');
+
+            if (useGradient) {
+                editorContent.style.background = `linear-gradient(to bottom, ${gradientStart}, ${gradientEnd})`;
+            } else {
+                editorContent.style.background = backgroundColor;
+            }
+        }
+
+        // Event listeners for gradient and background color changes
+        document.getElementById('gradientStart').addEventListener('input', updateEditorBackground);
+        document.getElementById('gradientEnd').addEventListener('input', updateEditorBackground);
+        document.getElementById('backgroundColor').addEventListener('input', () => {
+            document.getElementById('gradientStart').disabled = true;
+            document.getElementById('gradientEnd').disabled = true;
+            updateEditorBackground();
+        });
+
+        // Toggle gradient functionality
+        document.getElementById('gradientToggle').addEventListener('click', () => {
+            const gradientStart = document.getElementById('gradientStart');
+            const gradientEnd = document.getElementById('gradientEnd');
+            gradientStart.disabled = !gradientStart.disabled;
+            gradientEnd.disabled = !gradientEnd.disabled;
+            updateEditorBackground();
+        });
+
         let generatedImage = '';
-        let selection = null;
-
-        // Setup selection tool
-        const editor = document.getElementById('editor');
-        const selectionBox = document.createElement('div');
-        selectionBox.classList.add('selection');
-        editor.appendChild(selectionBox);
-
-        let startX, startY, isSelecting = false;
-
-        editor.addEventListener('mousedown', (e) => {
-            startX = e.clientX - editor.offsetLeft;
-            startY = e.clientY - editor.offsetTop;
-            isSelecting = true;
-            selectionBox.classList.remove('hidden');
-        });
-
-        editor.addEventListener('mousemove', (e) => {
-            if (!isSelecting) return;
-            const x = e.clientX - editor.offsetLeft;
-            const y = e.clientY - editor.offsetTop;
-            selectionBox.style.left = Math.min(x, startX) + 'px';
-            selectionBox.style.top = Math.min(y, startY) + 'px';
-            selectionBox.style.width = Math.abs(x - startX) + 'px';
-            selectionBox.style.height = Math.abs(y - startY) + 'px';
-        });
-
-        editor.addEventListener('mouseup', () => {
-            isSelecting = false;
-            selectionBox.classList.add('hidden');
-            selection = {
-                left: parseInt(selectionBox.style.left),
-                top: parseInt(selectionBox.style.top),
-                width: parseInt(selectionBox.style.width),
-                height: parseInt(selectionBox.style.height)
-            };
-        });
 
         // Convert editor content to image
         document.getElementById('convert').addEventListener('click', () => {
-            const editorContent = document.querySelector('#editor .ql-editor');
-            html2canvas(editorContent, {
+            // Temporarily hide the toolbar for capture
+            const toolbar = document.querySelector('.ql-toolbar');
+            toolbar.classList.add('hidden-for-capture');
+
+            html2canvas(document.querySelector('#editor-content'), {
                 scale: 2,
-                x: selection ? selection.left : 0,
-                y: selection ? selection.top : 0,
-                width: selection ? selection.width : editorContent.scrollWidth,
-                height: selection ? selection.height : editorContent.scrollHeight
+                backgroundColor: null
             }).then(canvas => {
+                // Show the toolbar again
+                toolbar.classList.remove('hidden-for-capture');
+
                 generatedImage = canvas.toDataURL(`image/${document.getElementById('imageFormat').value}`, document.getElementById('quality').value);
                 const imgElement = document.createElement('img');
                 imgElement.src = generatedImage;
@@ -176,7 +235,11 @@
                 link.click();
             }
         });
+
+        // Initial background update
+        updateEditorBackground();
     </script>
 </body>
 
 </html>
+``
