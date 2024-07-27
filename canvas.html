@@ -11,7 +11,8 @@
     <link href="https://cdn.jsdelivr.net/npm/quill-image-resize-module@3.0.0/image-resize.min.css" rel="stylesheet">
     <style>
         #editor {
-            height: 400px;
+            height: 700px;
+            position: relative;
         }
 
         #imagePreview {
@@ -22,11 +23,35 @@
         .buttons {
             margin-top: 20px;
         }
+
+        .toolbar {
+            margin-bottom: 10px;
+        }
+
+        .selection {
+            border: 2px dashed #000;
+            position: absolute;
+            pointer-events: none;
+            background: rgba(0, 0, 0, 0.1);
+        }
+
+        .selection.hidden {
+            display: none;
+        }
     </style>
 </head>
 
 <body>
     <div id="editor"></div>
+    <div class="toolbar">
+        <input type="file" id="imageUpload" accept="image/*">
+        <select id="imageFormat">
+            <option value="png">PNG</option>
+            <option value="jpeg">JPEG</option>
+        </select>
+        <input type="range" id="quality" min="0.1" max="1" step="0.1" value="0.8">
+        <label for="quality">Quality</label>
+    </div>
     <div class="buttons">
         <button id="convert">Convert to Image</button>
         <button id="openInNewTab" disabled>Open in New Tab</button>
@@ -49,7 +74,9 @@
                     [{ 'header': [1, 2, 3, 4, 5, 6, false] }, { 'font': [] }],
                     [{ 'list': 'ordered' }, { 'list': 'bullet' }],
                     ['bold', 'italic', 'underline'],
-                    ['image']
+                    ['link', 'image'],
+                    [{ 'align': [] }],
+                    [{ 'color': [] }, { 'background': [] }]
                 ],
                 imageResize: {
                     modules: ['Resize', 'DisplaySize', 'Toolbar']
@@ -57,13 +84,69 @@
             }
         });
 
+        // Handle image upload
+        document.getElementById('imageUpload').addEventListener('change', event => {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const range = quill.getSelection();
+                    quill.insertEmbed(range.index, 'image', e.target.result);
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
         let generatedImage = '';
+        let selection = null;
+
+        // Setup selection tool
+        const editor = document.getElementById('editor');
+        const selectionBox = document.createElement('div');
+        selectionBox.classList.add('selection');
+        editor.appendChild(selectionBox);
+
+        let startX, startY, isSelecting = false;
+
+        editor.addEventListener('mousedown', (e) => {
+            startX = e.clientX - editor.offsetLeft;
+            startY = e.clientY - editor.offsetTop;
+            isSelecting = true;
+            selectionBox.classList.remove('hidden');
+        });
+
+        editor.addEventListener('mousemove', (e) => {
+            if (!isSelecting) return;
+            const x = e.clientX - editor.offsetLeft;
+            const y = e.clientY - editor.offsetTop;
+            selectionBox.style.left = Math.min(x, startX) + 'px';
+            selectionBox.style.top = Math.min(y, startY) + 'px';
+            selectionBox.style.width = Math.abs(x - startX) + 'px';
+            selectionBox.style.height = Math.abs(y - startY) + 'px';
+        });
+
+        editor.addEventListener('mouseup', () => {
+            isSelecting = false;
+            selectionBox.classList.add('hidden');
+            selection = {
+                left: parseInt(selectionBox.style.left),
+                top: parseInt(selectionBox.style.top),
+                width: parseInt(selectionBox.style.width),
+                height: parseInt(selectionBox.style.height)
+            };
+        });
 
         // Convert editor content to image
         document.getElementById('convert').addEventListener('click', () => {
-            const editor = document.querySelector('#editor .ql-editor');
-            html2canvas(editor, { scale: 2 }).then(canvas => {
-                generatedImage = canvas.toDataURL("image/png");
+            const editorContent = document.querySelector('#editor .ql-editor');
+            html2canvas(editorContent, {
+                scale: 2,
+                x: selection ? selection.left : 0,
+                y: selection ? selection.top : 0,
+                width: selection ? selection.width : editorContent.scrollWidth,
+                height: selection ? selection.height : editorContent.scrollHeight
+            }).then(canvas => {
+                generatedImage = canvas.toDataURL(`image/${document.getElementById('imageFormat').value}`, document.getElementById('quality').value);
                 const imgElement = document.createElement('img');
                 imgElement.src = generatedImage;
                 imgElement.style.width = '100%';
@@ -89,7 +172,7 @@
             if (generatedImage) {
                 const link = document.createElement('a');
                 link.href = generatedImage;
-                link.download = 'quill-image.png';
+                link.download = `quill-image.${document.getElementById('imageFormat').value}`;
                 link.click();
             }
         });
