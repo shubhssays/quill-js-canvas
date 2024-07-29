@@ -1,10 +1,9 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Quill Editor to Image</title>
+    <title>Quill Editor with Modal Canvas</title>
     <!-- Include Quill CSS -->
     <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
     <!-- Include Quill Image Resize CSS -->
@@ -16,44 +15,153 @@
             padding: 0;
             display: flex;
             flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+            transition: background-color 0.3s ease;
+        }
+
+        #container {
+            display: flex;
+            width: 100%;
+            height: 100%;
+        }
+
+        #sidebar {
+            width: 250px;
+            background-color: #fff;
+            border-right: 1px solid #ddd;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            padding: 10px;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease;
+        }
+
+        #sidebar.closed {
+            transform: translateX(-100%);
+        }
+
+        #sidebar-toggle {
+            position: absolute;
+            top: 10px;
+            right: -30px;
+            width: 30px;
+            height: 30px;
+            background: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+            display: flex;
             align-items: center;
-            background-color: #f4f4f4;
+            justify-content: center;
+            border-radius: 5px;
+            z-index: 10;
+        }
+
+        #editor-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 10px;
+            box-sizing: border-box;
+            position: relative;
         }
 
         #editor {
-            width: 80%;
-            max-width: 800px;
-            height: 400px;
-            margin-top: 20px;
+            flex: 1;
             border: 1px solid #ddd;
             position: relative;
             overflow: hidden;
+            height: 80%;
         }
 
-        #editor-content {
-            height: 100%;
-            overflow: hidden;
+        .ql-toolbar {
+            background: #fff;
+            border-bottom: 1px solid #ddd;
         }
 
-        .ql-toolbar.hidden-for-capture {
-            visibility: hidden;
-        }
-
-        #imagePreview {
+        #modal {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
             width: 80%;
-            max-width: 800px;
-            margin: 20px 0;
+            height: 80%;
+            background-color: rgba(255, 255, 255, 0.9);
             border: 1px solid #ddd;
-            background-color: #fff;
-            text-align: center;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            z-index: 1000;
+            overflow: hidden;
+            backdrop-filter: blur(10px);
+            transition: opacity 0.3s ease, visibility 0.3s ease;
+        }
+
+        #modal.show {
+            display: block;
+            opacity: 1;
+            visibility: visible;
+        }
+
+        #modal-content {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            padding: 20px;
+            box-sizing: border-box;
+            overflow: auto;
+        }
+
+        #modal-header {
+            position: absolute;
+            top: 0;
+            right: 0;
+            height: 50px;
+            width: calc(100% - 20px);
+            background: #007bff;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+        }
+
+        #modal-header h2 {
+            margin: 0;
+        }
+
+        #modal-header button {
+            background: #fff;
+            border: none;
+            color: #007bff;
+            font-size: 16px;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+
+        #modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 999;
+            display: none;
+        }
+
+        #modal-overlay.show {
+            display: block;
         }
 
         .toolbar {
             display: flex;
-            flex-wrap: wrap;
-            justify-content: center;
-            margin: 20px;
+            flex-direction: column;
             gap: 10px;
+            margin-top: 10px;
         }
 
         .toolbar input[type="file"],
@@ -72,7 +180,10 @@
         }
 
         .buttons {
-            margin: 20px;
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 10px;
         }
 
         .buttons button {
@@ -83,39 +194,82 @@
             color: #fff;
             font-size: 16px;
             cursor: pointer;
-            margin: 0 5px;
         }
 
         .buttons button:disabled {
             background-color: #6c757d;
             cursor: not-allowed;
         }
+
+        #gradientDirectionButtons {
+            display: flex;
+            flex-direction: column;
+            margin-top: 10px;
+        }
+
+        #gradientDirectionButtons button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            background-color: #007bff;
+            color: #fff;
+            cursor: pointer;
+            margin-bottom: 5px;
+        }
+
+        #gradientDirectionButtons button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
     </style>
 </head>
-
 <body>
-    <div id="editor">
-        <div id="editor-content"></div>
+    <div id="container">
+        <div id="sidebar">
+            <button id="sidebar-toggle">☰</button>
+            <div class="toolbar">
+                <input type="file" id="imageUpload" accept="image/*">
+                <select id="imageFormat">
+                    <option value="png">PNG</option>
+                    <option value="jpeg">JPEG</option>
+                </select>
+                <input type="range" id="quality" min="0.1" max="1" step="0.1" value="0.8">
+                <label for="quality">Quality</label>
+                <input type="color" id="backgroundColor" value="#ffffff">
+                <button id="gradientToggle">Add Gradient</button>
+                <input type="color" id="gradientStart" value="#ffffff" disabled>
+                <input type="color" id="gradientEnd" value="#000000" disabled>
+                <div id="gradientDirectionButtons" style="display: none;">
+                    <button id="directionToLeft">Left to Right</button>
+                    <button id="directionToTop">Top to Bottom</button>
+                    <button id="directionToDiagonal">Diagonal (Top Left to Bottom Right)</button>
+                    <button id="directionToReverseDiagonal">Diagonal (Top Right to Bottom Left)</button>
+                </div>
+            </div>
+        </div>
+        <div id="editor-container">
+            <div id="editor"></div>
+            <div class="buttons">
+                <button id="openCanvas">Open Canvas</button>
+            </div>
+        </div>
     </div>
-    <div class="toolbar">
-        <input type="file" id="imageUpload" accept="image/*">
-        <select id="imageFormat">
-            <option value="png">PNG</option>
-            <option value="jpeg">JPEG</option>
-        </select>
-        <input type="range" id="quality" min="0.1" max="1" step="0.1" value="0.8">
-        <label for="quality">Quality</label>
-        <input type="color" id="backgroundColor" value="#ffffff">
-        <button id="gradientToggle">Add Gradient</button>
-        <input type="color" id="gradientStart" value="#ffffff" disabled>
-        <input type="color" id="gradientEnd" value="#000000" disabled>
+
+    <div id="modal-overlay"></div>
+    <div id="modal">
+        <div id="modal-header">
+            <h2>Canvas Preview</h2>
+            <button id="closeModal">×</button>
+        </div>
+        <div id="modal-content">
+            <div id="imagePreview"></div>
+            <div class="buttons">
+                <button id="convert">Convert to Image</button>
+                <button id="openInNewTab" disabled>Open in New Tab</button>
+                <button id="saveImage" disabled>Save Image</button>
+            </div>
+        </div>
     </div>
-    <div class="buttons">
-        <button id="convert">Convert to Image</button>
-        <button id="openInNewTab" disabled>Open in New Tab</button>
-        <button id="saveImage" disabled>Save Image</button>
-    </div>
-    <div id="imagePreview"></div>
 
     <!-- Include Quill JS -->
     <script src="https://cdn.quilljs.com/1.3.6/quill.js"></script>
@@ -125,33 +279,19 @@
     <script src="https://cdn.jsdelivr.net/npm/quill-image-resize-module@3.0.0/image-resize.min.js"></script>
     <script>
         // Initialize Quill
-        const quill = new Quill('#editor-content', {
+        const quill = new Quill('#editor', {
             theme: 'snow',
             modules: {
                 toolbar: [
                     [{ 'header': [1, 2, 3, 4, 5, 6, false] }, { 'font': [] }],
                     [{ 'list': 'ordered' }, { 'list': 'bullet' }],
                     ['bold', 'italic', 'underline'],
-                    ['link', 'image'],
+                    [{ 'color': [] }, { 'background': [] }],
                     [{ 'align': [] }],
-                    [{ 'color': [] }, { 'background': [] }]
+                    ['link', 'image'],
+                    ['clean']
                 ],
-                imageResize: {
-                    modules: ['Resize', 'DisplaySize', 'Toolbar']
-                }
-            }
-        });
-
-        // Handle image upload
-        document.getElementById('imageUpload').addEventListener('change', event => {
-            const file = event.target.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    const range = quill.getSelection();
-                    quill.insertEmbed(range.index, 'image', e.target.result);
-                };
-                reader.readAsDataURL(file);
+                imageResize: {}
             }
         });
 
@@ -160,13 +300,13 @@
             const gradientStart = document.getElementById('gradientStart').value;
             const gradientEnd = document.getElementById('gradientEnd').value;
             const backgroundColor = document.getElementById('backgroundColor').value;
+            const gradientDirection = document.querySelector('input[name="gradientDirection"]:checked')?.value || 'to bottom';
             const useGradient = !document.getElementById('gradientStart').disabled;
 
-            const editor = document.getElementById('editor');
-            const editorContent = document.getElementById('editor-content');
+            const editorContent = document.querySelector('#editor .ql-editor');
 
             if (useGradient) {
-                editorContent.style.background = `linear-gradient(to bottom, ${gradientStart}, ${gradientEnd})`;
+                editorContent.style.background = `linear-gradient(${gradientDirection}, ${gradientStart}, ${gradientEnd})`;
             } else {
                 editorContent.style.background = backgroundColor;
             }
@@ -175,71 +315,103 @@
         // Event listeners for gradient and background color changes
         document.getElementById('gradientStart').addEventListener('input', updateEditorBackground);
         document.getElementById('gradientEnd').addEventListener('input', updateEditorBackground);
-        document.getElementById('backgroundColor').addEventListener('input', () => {
-            document.getElementById('gradientStart').disabled = true;
-            document.getElementById('gradientEnd').disabled = true;
-            updateEditorBackground();
-        });
+        document.getElementById('backgroundColor').addEventListener('input', updateEditorBackground);
 
         // Toggle gradient functionality
         document.getElementById('gradientToggle').addEventListener('click', () => {
             const gradientStart = document.getElementById('gradientStart');
             const gradientEnd = document.getElementById('gradientEnd');
-            gradientStart.disabled = !gradientStart.disabled;
-            gradientEnd.disabled = !gradientEnd.disabled;
+            const directionButtons = document.getElementById('gradientDirectionButtons');
+
+            const isDisabled = gradientStart.disabled;
+            gradientStart.disabled = !isDisabled;
+            gradientEnd.disabled = !isDisabled;
+            directionButtons.style.display = isDisabled ? 'flex' : 'none';
+
             updateEditorBackground();
         });
 
-        let generatedImage = '';
+        // Set gradient direction
+        document.getElementById('directionToLeft').addEventListener('click', () => {
+            document.querySelector('#editor .ql-editor').style.background = `linear-gradient(to right, ${document.getElementById('gradientStart').value}, ${document.getElementById('gradientEnd').value})`;
+        });
 
-        // Convert editor content to image
-        document.getElementById('convert').addEventListener('click', () => {
-            // Temporarily hide the toolbar for capture
-            const toolbar = document.querySelector('.ql-toolbar');
-            toolbar.classList.add('hidden-for-capture');
+        document.getElementById('directionToTop').addEventListener('click', () => {
+            document.querySelector('#editor .ql-editor').style.background = `linear-gradient(to bottom, ${document.getElementById('gradientStart').value}, ${document.getElementById('gradientEnd').value})`;
+        });
 
-            html2canvas(document.querySelector('#editor-content'), {
-                scale: 2,
-                backgroundColor: null
-            }).then(canvas => {
-                // Show the toolbar again
-                toolbar.classList.remove('hidden-for-capture');
+        document.getElementById('directionToDiagonal').addEventListener('click', () => {
+            document.querySelector('#editor .ql-editor').style.background = `linear-gradient(to bottom right, ${document.getElementById('gradientStart').value}, ${document.getElementById('gradientEnd').value})`;
+        });
 
-                generatedImage = canvas.toDataURL(`image/${document.getElementById('imageFormat').value}`, document.getElementById('quality').value);
-                const imgElement = document.createElement('img');
-                imgElement.src = generatedImage;
-                imgElement.style.width = '100%';
-                document.getElementById('imagePreview').innerHTML = '';
-                document.getElementById('imagePreview').appendChild(imgElement);
+        document.getElementById('directionToReverseDiagonal').addEventListener('click', () => {
+            document.querySelector('#editor .ql-editor').style.background = `linear-gradient(to bottom left, ${document.getElementById('gradientStart').value}, ${document.getElementById('gradientEnd').value})`;
+        });
 
-                // Enable the buttons after image is generated
+        // Open Canvas modal
+        document.getElementById('openCanvas').addEventListener('click', () => {
+            const modal = document.getElementById('modal');
+            const overlay = document.getElementById('modal-overlay');
+
+            modal.classList.add('show');
+            overlay.classList.add('show');
+
+            html2canvas(document.querySelector('#editor .ql-editor')).then(canvas => {
+                const imagePreview = document.getElementById('imagePreview');
+                imagePreview.innerHTML = '';
+                imagePreview.appendChild(canvas);
+                
+                // Enable buttons
+                document.getElementById('convert').disabled = false;
                 document.getElementById('openInNewTab').disabled = false;
                 document.getElementById('saveImage').disabled = false;
             });
         });
 
-        // Open image in new tab
+        // Close Canvas modal
+        document.getElementById('closeModal').addEventListener('click', () => {
+            const modal = document.getElementById('modal');
+            const overlay = document.getElementById('modal-overlay');
+            
+            modal.classList.remove('show');
+            overlay.classList.remove('show');
+        });
+
+        // Close Canvas modal when clicking outside
+        document.getElementById('modal-overlay').addEventListener('click', () => {
+            document.getElementById('modal').classList.remove('show');
+            document.getElementById('modal-overlay').classList.remove('show');
+        });
+
+        // Convert Canvas to Image
+        document.getElementById('convert').addEventListener('click', () => {
+            const canvas = document.querySelector('#imagePreview canvas');
+            const link = document.createElement('a');
+            link.href = canvas.toDataURL();
+            link.download = 'canvas.png';
+            link.click();
+        });
+
+        // Open Canvas in New Tab
         document.getElementById('openInNewTab').addEventListener('click', () => {
-            if (generatedImage) {
-                const newWindow = window.open();
-                newWindow.document.write(`<img src="${generatedImage}" style="width: 100%;">`);
-            }
+            const canvas = document.querySelector('#imagePreview canvas');
+            const newTab = window.open();
+            newTab.document.body.innerHTML = `<img src="${canvas.toDataURL()}" />`;
         });
 
-        // Save image
+        // Save Image
         document.getElementById('saveImage').addEventListener('click', () => {
-            if (generatedImage) {
-                const link = document.createElement('a');
-                link.href = generatedImage;
-                link.download = `quill-image.${document.getElementById('imageFormat').value}`;
-                link.click();
-            }
+            const canvas = document.querySelector('#imagePreview canvas');
+            const link = document.createElement('a');
+            link.href = canvas.toDataURL();
+            link.download = 'canvas.png';
+            link.click();
         });
 
-        // Initial background update
-        updateEditorBackground();
+        // Toggle Sidebar
+        document.getElementById('sidebar-toggle').addEventListener('click', () => {
+            document.getElementById('sidebar').classList.toggle('closed');
+        });
     </script>
 </body>
-
 </html>
-``
